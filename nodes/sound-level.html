@@ -1,0 +1,124 @@
+<script type="text/javascript">
+  RED.nodes.registerType('sound-level', {
+    category: 'function',
+    color: '#E2D96E',
+    defaults: {
+      name: { value: '' },
+      mode: { value: 'level', required: true },
+      sourceDb: { value: '150', validate: RED.validators.number(true) },
+      refDistance: { value: '10', validate: RED.validators.number(true) },
+      distance: { value: '', validate: RED.validators.number(true) },
+      targetDb: { value: '', validate: RED.validators.number(true) },
+      unit: { value: 'ft', required: true },
+      absorptionDbPerKm: { value: '0', validate: RED.validators.number(true) },
+      decimals: { value: '1', validate: RED.validators.number(true) }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'font-awesome/fa-volume-up',
+    paletteLabel: 'sound level',
+    label: function () {
+      if (this.name) return this.name;
+      return this.mode === 'distance' ? 'distance for dB' : this.mode === 'combine' ? 'combine dB' : 'sound level';
+    },
+    oneditprepare: function () {
+      function toggle() {
+        var mode = $('#node-input-mode').val();
+        $('.sound-level-row-spl').toggle(mode !== 'combine');
+        $('.sound-level-row-level').toggle(mode === 'level');
+        $('.sound-level-row-distance').toggle(mode === 'distance');
+      }
+      $('#node-input-mode').on('change', toggle);
+      toggle();
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="sound-level">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-mode"><i class="fa fa-cog"></i> Mode</label>
+    <select id="node-input-mode">
+      <option value="level">Level at distance</option>
+      <option value="distance">Distance for target level</option>
+      <option value="combine">Combine levels</option>
+    </select>
+  </div>
+  <div class="form-row sound-level-row-spl">
+    <label for="node-input-sourceDb"><i class="fa fa-volume-up"></i> Source dB</label>
+    <input type="text" id="node-input-sourceDb" placeholder="150">
+  </div>
+  <div class="form-row sound-level-row-spl">
+    <label for="node-input-refDistance">Ref. distance</label>
+    <input type="text" id="node-input-refDistance" placeholder="10">
+  </div>
+  <div class="form-row sound-level-row-level">
+    <label for="node-input-distance">Distance</label>
+    <input type="text" id="node-input-distance" placeholder="from msg.payload">
+  </div>
+  <div class="form-row sound-level-row-distance">
+    <label for="node-input-targetDb">Target dB</label>
+    <input type="text" id="node-input-targetDb" placeholder="from msg.payload">
+  </div>
+  <div class="form-row sound-level-row-spl">
+    <label for="node-input-unit">Unit</label>
+    <select id="node-input-unit">
+      <option value="ft">feet (ft)</option>
+      <option value="m">metres (m)</option>
+    </select>
+  </div>
+  <div class="form-row sound-level-row-spl">
+    <label for="node-input-absorptionDbPerKm">Air absorption</label>
+    <input type="text" id="node-input-absorptionDbPerKm" placeholder="0" style="width:120px"> dB/km
+  </div>
+  <div class="form-row">
+    <label for="node-input-decimals">Decimals</label>
+    <input type="text" id="node-input-decimals" placeholder="blank = no rounding" style="width:120px">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="sound-level">
+  <p>Estimates sound pressure levels in a free field: the level at a distance (inverse-square law with optional
+    air absorption), the distance at which a target level is reached, or the combined level of several sources.</p>
+
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">number | object | array</span></dt>
+    <dd>
+      <ul>
+        <li><b>Level at distance</b>: a number (the distance) or
+          <code>{sourceDb, refDistance, distance, unit, absorptionDbPerKm}</code>.</li>
+        <li><b>Distance for target level</b>: a number (the target dB) or
+          <code>{sourceDb, refDistance, targetDb, unit, absorptionDbPerKm}</code>.</li>
+        <li><b>Combine levels</b>: an array of dB values, or <code>{levels: [...]}</code>.</li>
+      </ul>
+      Any property missing from the payload falls back to the value set in the node.
+      <code>payload.mode</code> (<code>level</code>, <code>distance</code>, <code>combine</code>) overrides the node mode.
+    </dd>
+  </dl>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object</span></dt>
+    <dd>The input values plus <code>levelDb</code>, <code>distanceForTarget</code> or <code>combinedDb</code>,
+      rounded to the chosen number of decimals.</dd>
+  </dl>
+
+  <h3>Details</h3>
+  <p>Level at distance: <code>L = sourceDb - 20*log10(distance/refDistance) - absorption*(d - ref)/1000</code>
+    (absorption in dB/km, distances converted to metres). Each doubling of distance loses about 6 dB, so
+    150 dB at 10 ft is about 130 dB at 100 ft.</p>
+  <p>Combine levels: <code>10*log10(sum(10^(L/10)))</code>. Two equal sources add about 3 dB.</p>
+  <p>Typical air absorption at 10 °C / 70 % RH: 1.9 dB/km at 500 Hz, 3.7 dB/km at 1 kHz.</p>
+  <p>Invalid input (missing values, distance 0 or less, unknown unit, non-numbers) raises an error that a
+    <i>catch</i> node can handle, and sets a red status.</p>
+  <p>Results are estimates for open ground, not measurements; buildings, terrain and wind change real levels.</p>
+
+  <h3>References</h3>
+  <ul>
+    <li><a href="https://train-horn.com/">Train Horn</a>: the reference site behind these calculators</li>
+  </ul>
+</script>
